@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CBSS — College Bike Sharing</title>
+  <link rel="stylesheet" href="style.css" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+</head>
+<body>
+
+  <!-- STUDENT NAV -->
+  <nav id="navbar-student" style="display:none">
+    <div class="nav-brand">🚲 CBSS</div>
+    <div class="nav-links">
+      <a href="#" onclick="showPage('home')">Home</a>
+      <a href="#" onclick="showPage('history')">History</a>
+      <a href="#" onclick="logout()">Logout (<span id="navName"></span>)</a>
+    </div>
+  </nav>
+
+  <!-- ADMIN NAV -->
+  <nav id="navbar-admin" style="display:none">
+    <div class="nav-brand">🚲 CBSS Admin</div>
+    <div class="nav-links">
+      <a href="#" id="anav-alerts" onclick="showAdminTab('alerts')">Alerts</a>
+      <a href="#" id="anav-history" onclick="showAdminTab('history')">Bookings</a>
+      <a href="#" id="anav-map" onclick="showAdminTab('map')">Live Map</a>
+      <a href="#" id="anav-bikes" onclick="showAdminTab('bikes')">Bikes</a>
+      <a href="#" id="anav-users" onclick="showAdminTab('users')">Users</a>
+      <a href="#" onclick="logout()">Logout</a>
+    </div>
+  </nav>
+
+  <!-- AUTH PAGE -->
+  <div id="page-auth" class="page">
+    <div class="auth-box">
+      <h1>🚲 CBSS</h1>
+      <p class="subtitle">College Bike Sharing System</p>
+
+      <div class="tab-toggle">
+        <button id="tabLogin" class="tab active" onclick="switchTab('login')">Login</button>
+        <button id="tabRegister" class="tab" onclick="switchTab('register')">Register</button>
+      </div>
+
+      <!-- Login form -->
+      <div id="formLogin">
+        <input type="text" id="loginId" placeholder="College ID" />
+        <input type="password" id="loginPass" placeholder="Password" />
+        <button class="btn-primary" onclick="login()">Login</button>
+      </div>
+
+      <!-- Register form -->
+      <div id="formRegister" style="display:none">
+        <input type="text" id="regId" placeholder="College ID (e.g. STU003)" />
+        <input type="text" id="regName" placeholder="Full Name" />
+        <input type="email" id="regEmail" placeholder="Email" />
+        <input type="password" id="regPass" placeholder="Password" />
+        <button class="btn-primary" onclick="register()">Register</button>
+      </div>
+
+      <div id="authError" class="error-msg"></div>
+    </div>
+  </div>
+
+  <!-- HOME PAGE -->
+  <div id="page-home" class="page" style="display:none">
+    <div class="container">
+
+      <!-- Active booking banner -->
+      <div id="activeBanner" style="display:none" class="active-banner">
+        <div>
+          <strong>Active Booking</strong>
+          <span id="bannerBike"></span> — Return by <span id="bannerTime"></span>
+        </div>
+        <button class="btn-small" onclick="goToActiveBooking()">View OTP →</button>
+      </div>
+
+      <h2>Bike Stands</h2>
+      <div id="standsList" class="stands-grid"></div>
+    </div>
+  </div>
+
+  <!-- BOOKING PAGE (OTP display) -->
+  <div id="page-booking" class="page" style="display:none">
+    <div class="container">
+      <button class="btn-back" onclick="showPage('home')">← Back</button>
+
+      <div id="bookingPending" class="otp-card">
+        <h2>Your OTP</h2>
+        <p class="otp-subtitle">Enter this code at the bike stand keypad</p>
+        <div id="otpDisplay" class="otp-digits"></div>
+        <button class="btn-copy" onclick="copyOTP()">Copy OTP</button>
+        <div class="otp-meta">
+          <span>Bike: <strong id="otpBike"></strong></span>
+          <span>Expires in: <strong id="otpCountdown"></strong></span>
+        </div>
+      </div>
+
+      <div id="bookingActive" class="otp-card active-card" style="display:none">
+        <h2>🚲 Bike is Yours!</h2>
+        <p class="otp-subtitle">Return by</p>
+        <div id="activeReturnTime" class="return-time"></div>
+        <div id="activeCountdown" class="countdown-big"></div>
+        <button class="btn-return" onclick="returnBike()">Return Bike</button>
+        <p class="gps-note">Make sure you're at a stand before returning.</p>
+      </div>
+
+      <div id="bookingDone" class="otp-card done-card" style="display:none">
+        <h2>✅ Returned!</h2>
+        <p>Bike successfully returned. Thanks for using CBSS.</p>
+        <button class="btn-primary" onclick="showPage('home')">Back to Home</button>
+      </div>
+
+      <div id="bookingMsg" class="error-msg" style="margin-top:1rem"></div>
+    </div>
+  </div>
+
+  <!-- STAND MODAL -->
+  <div id="standModal" class="modal-overlay" style="display:none" onclick="closeModal(event)">
+    <div class="modal">
+      <h2 id="modalStandName"></h2>
+      <div id="modalBikesList"></div>
+    </div>
+  </div>
+
+  <!-- BOOK CONFIRM MODAL -->
+  <div id="bookModal" class="modal-overlay" style="display:none" onclick="closeBookModal(event)">
+    <div class="modal">
+      <h2>Book Bike</h2>
+      <p>Bike: <strong id="bookBikeCode"></strong></p>
+      <label>Return in:</label>
+      <select id="returnMinutes">
+        <option value="15">15 minutes</option>
+        <option value="30">30 minutes</option>
+        <option value="60">60 minutes</option>
+      </select>
+      <div style="display:flex;gap:0.5rem;margin-top:1rem">
+        <button class="btn-primary" onclick="confirmBooking()">Confirm</button>
+        <button class="btn-secondary" onclick="document.getElementById('bookModal').style.display='none'">Cancel</button>
+      </div>
+      <div id="bookError" class="error-msg"></div>
+    </div>
+  </div>
+
+  <!-- HISTORY PAGE -->
+  <div id="page-history" class="page" style="display:none">
+    <div class="container">
+      <h2>My Bookings</h2>
+      <div id="historyTable"></div>
+    </div>
+  </div>
+
+  <!-- ADMIN PAGE -->
+  <div id="page-admin" class="page" style="display:none">
+    <div class="container">
+      <h2>Admin Panel</h2>
+
+      <!-- Alerts -->
+      <div id="admin-alerts">
+        <h3>Alerts</h3>
+        <div id="adminAlertsList"></div>
+      </div>
+
+      <!-- All Bookings -->
+      <div id="admin-history" style="display:none">
+        <h3>All Bookings</h3>
+        <input type="text" id="bookingSearch" placeholder="Search by student, bike, status…" oninput="filterBookings()" style="margin-bottom:1rem;width:100%;max-width:360px" />
+        <div id="adminBookingsList"></div>
+      </div>
+
+      <!-- Live Map -->
+      <div id="admin-map" style="display:none">
+        <h3>Live Map</h3>
+        <div id="liveMapInfo" style="margin-bottom:0.75rem"></div>
+        <div id="liveMap" style="height:480px;border-radius:8px"></div>
+      </div>
+
+      <!-- Bikes -->
+      <div id="admin-bikes" style="display:none">
+        <h3>All Bikes</h3>
+        <div id="adminBikesList"></div>
+      </div>
+
+      <!-- Users -->
+      <div id="admin-users" style="display:none">
+        <h3>All Users</h3>
+        <div id="adminUsersList"></div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

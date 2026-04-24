@@ -1,0 +1,5 @@
+backend/node_modules/
+backend/cbss.db
+__pycache__/
+*.pyc
+cbss.tar.gz

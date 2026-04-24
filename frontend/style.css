@@ -1,0 +1,667 @@
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  background: #f4f6f9;
+  color: #222;
+  min-height: 100vh;
+}
+
+/* ── Nav ──────────────────────────────────────────────────────── */
+nav {
+  background: #1a73e8;
+  color: white;
+  padding: 0.8rem 1.5rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+}
+.nav-brand {
+  font-size: 1.2rem;
+  font-weight: 700;
+}
+.nav-links {
+  display: flex;
+  gap: 1.2rem;
+  align-items: center;
+}
+.nav-links a {
+  color: white;
+  text-decoration: none;
+  font-size: 0.9rem;
+  opacity: 0.9;
+}
+.nav-links a:hover {
+  opacity: 1;
+  text-decoration: underline;
+}
+
+/* ── Auth page ────────────────────────────────────────────────── */
+#page-auth {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 100vh;
+  padding: 1rem;
+}
+.auth-box {
+  background: white;
+  border-radius: 12px;
+  padding: 2.5rem 2rem;
+  width: 100%;
+  max-width: 380px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+  text-align: center;
+}
+.auth-box h1 {
+  font-size: 2rem;
+  margin-bottom: 0.3rem;
+}
+.subtitle {
+  color: #666;
+  margin-bottom: 1.5rem;
+  font-size: 0.9rem;
+}
+.auth-box input {
+  width: 100%;
+  padding: 0.75rem 1rem;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  font-size: 1rem;
+  margin-bottom: 0.75rem;
+  display: block;
+}
+.auth-box input:focus {
+  outline: none;
+  border-color: #1a73e8;
+}
+
+/* ── Tab toggle ───────────────────────────────────────────────── */
+.tab-toggle {
+  display: flex;
+  margin-bottom: 1.5rem;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid #ddd;
+}
+.tab {
+  flex: 1;
+  padding: 0.6rem;
+  background: white;
+  border: none;
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+.tab.active {
+  background: #1a73e8;
+  color: white;
+  font-weight: 600;
+}
+
+/* ── Buttons ──────────────────────────────────────────────────── */
+.btn-primary {
+  width: 100%;
+  padding: 0.8rem;
+  background: #1a73e8;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  margin-top: 0.25rem;
+}
+.btn-primary:hover {
+  background: #1558b0;
+}
+.btn-secondary {
+  flex: 1;
+  padding: 0.8rem;
+  background: #eee;
+  color: #333;
+  border: none;
+  border-radius: 8px;
+  font-size: 1rem;
+  cursor: pointer;
+}
+.btn-secondary:hover {
+  background: #ddd;
+}
+.btn-small {
+  padding: 0.4rem 0.9rem;
+  background: white;
+  color: #1a73e8;
+  border: 1px solid #1a73e8;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  cursor: pointer;
+  font-weight: 600;
+}
+.btn-back {
+  background: none;
+  border: none;
+  color: #1a73e8;
+  cursor: pointer;
+  font-size: 0.95rem;
+  margin-bottom: 1.5rem;
+  padding: 0;
+}
+.btn-return {
+  width: 100%;
+  padding: 1rem;
+  background: #34a853;
+  color: white;
+  border: none;
+  border-radius: 10px;
+  font-size: 1.1rem;
+  font-weight: 700;
+  cursor: pointer;
+  margin-top: 1.5rem;
+}
+.btn-return:hover {
+  background: #2d9144;
+}
+.btn-copy {
+  padding: 0.5rem 1.5rem;
+  background: #f1f3f4;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  margin: 0.75rem 0;
+}
+.btn-copy:hover {
+  background: #e8eaed;
+}
+
+/* ── Messages ─────────────────────────────────────────────────── */
+.error-msg {
+  color: #d32f2f;
+  font-size: 0.88rem;
+  margin-top: 0.5rem;
+  min-height: 1.2rem;
+}
+.success-msg {
+  color: #2d9144;
+  font-size: 0.88rem;
+  margin-top: 0.5rem;
+}
+
+/* ── Container ────────────────────────────────────────────────── */
+.container {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 1.5rem 1rem;
+}
+.container h2 {
+  margin-bottom: 1rem;
+  font-size: 1.4rem;
+}
+
+/* ── Active banner ────────────────────────────────────────────── */
+.active-banner {
+  background: #e8f5e9;
+  border: 1px solid #a5d6a7;
+  border-radius: 10px;
+  padding: 0.9rem 1.2rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1.5rem;
+}
+.active-banner strong {
+  color: #2d9144;
+}
+
+/* ── Stands grid ──────────────────────────────────────────────── */
+.stands-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 1rem;
+}
+.stand-card {
+  background: white;
+  border-radius: 10px;
+  padding: 1.2rem;
+  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.08);
+  cursor: pointer;
+  transition: box-shadow 0.15s;
+}
+.stand-card:hover {
+  box-shadow: 0 3px 12px rgba(0, 0, 0, 0.15);
+}
+.stand-card h3 {
+  font-size: 1rem;
+  margin-bottom: 0.4rem;
+}
+.stand-avail {
+  font-size: 2rem;
+  font-weight: 700;
+  color: #1a73e8;
+}
+.stand-avail-label {
+  font-size: 0.8rem;
+  color: #888;
+}
+.stand-zero {
+  color: #999;
+}
+
+/* ── OTP card ─────────────────────────────────────────────────── */
+.otp-card {
+  background: white;
+  border-radius: 14px;
+  padding: 2rem 1.5rem;
+  text-align: center;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+  max-width: 440px;
+  margin: 0 auto;
+}
+.otp-card h2 {
+  font-size: 1.4rem;
+  margin-bottom: 0.4rem;
+}
+.otp-subtitle {
+  color: #666;
+  font-size: 0.9rem;
+  margin-bottom: 1.5rem;
+}
+
+.otp-digits {
+  font-size: 3.5rem;
+  font-weight: 800;
+  letter-spacing: 0.5rem;
+  color: #1a73e8;
+  background: #f0f6ff;
+  border-radius: 10px;
+  padding: 1rem;
+  font-family: "Courier New", monospace;
+  margin-bottom: 0.5rem;
+}
+.otp-meta {
+  display: flex;
+  justify-content: space-around;
+  font-size: 0.88rem;
+  color: #555;
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid #eee;
+}
+
+.active-card {
+  border: 2px solid #34a853;
+}
+.done-card {
+  border: 2px solid #1a73e8;
+}
+
+.return-time {
+  font-size: 1.4rem;
+  font-weight: 700;
+  color: #333;
+  margin: 0.5rem 0;
+}
+.countdown-big {
+  font-size: 2.5rem;
+  font-weight: 800;
+  color: #e53935;
+  margin: 0.5rem 0;
+}
+.gps-note {
+  font-size: 0.8rem;
+  color: #888;
+  margin-top: 0.75rem;
+}
+
+/* ── Modal ────────────────────────────────────────────────────── */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 200;
+  padding: 1rem;
+}
+.modal {
+  background: white;
+  border-radius: 12px;
+  padding: 1.5rem;
+  width: 100%;
+  max-width: 420px;
+  max-height: 80vh;
+  overflow-y: auto;
+}
+.modal h2 {
+  margin-bottom: 1rem;
+  font-size: 1.2rem;
+}
+.modal label {
+  font-size: 0.9rem;
+  color: #555;
+  display: block;
+  margin-bottom: 0.3rem;
+}
+.modal select {
+  width: 100%;
+  padding: 0.6rem;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  font-size: 1rem;
+}
+
+.bike-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.75rem 0;
+  border-bottom: 1px solid #f0f0f0;
+}
+.bike-row:last-child {
+  border-bottom: none;
+}
+.bike-code {
+  font-weight: 700;
+  font-family: monospace;
+  font-size: 1rem;
+}
+.bike-status {
+  font-size: 0.8rem;
+  color: #34a853;
+}
+
+/* ── History table ────────────────────────────────────────────── */
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: white;
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.08);
+}
+.data-table th {
+  background: #f8f9fa;
+  padding: 0.75rem 1rem;
+  text-align: left;
+  font-size: 0.85rem;
+  color: #555;
+  border-bottom: 1px solid #eee;
+}
+.data-table td {
+  padding: 0.75rem 1rem;
+  font-size: 0.9rem;
+  border-bottom: 1px solid #f5f5f5;
+}
+.data-table tr:last-child td {
+  border-bottom: none;
+}
+
+.badge {
+  display: inline-block;
+  padding: 0.2rem 0.6rem;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+.badge-active {
+  background: #e8f5e9;
+  color: #2d9144;
+}
+.badge-pending {
+  background: #fff8e1;
+  color: #f57f17;
+}
+.badge-completed {
+  background: #e3f2fd;
+  color: #1565c0;
+}
+.badge-flagged {
+  background: #fce4ec;
+  color: #c62828;
+}
+.badge-expired {
+  background: #f5f5f5;
+  color: #757575;
+}
+.badge-missing {
+  background: #fce4ec;
+  color: #b71c1c;
+}
+
+/* ── Admin tabs ───────────────────────────────────────────────── */
+.admin-tabs {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1.2rem;
+}
+.admin-tabs .tab {
+  padding: 0.5rem 1.2rem;
+  background: white;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+.admin-tabs .tab.active {
+  background: #1a73e8;
+  color: white;
+  border-color: #1a73e8;
+}
+
+.alert-card {
+  background: white;
+  border-radius: 8px;
+  padding: 1rem 1.2rem;
+  margin-bottom: 0.75rem;
+  border-left: 4px solid #e53935;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.07);
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+}
+.alert-card.resolved {
+  border-left-color: #aaa;
+  opacity: 0.6;
+}
+.alert-type {
+  font-weight: 700;
+  font-size: 0.8rem;
+  color: #e53935;
+  margin-bottom: 0.2rem;
+}
+.alert-msg {
+  font-size: 0.9rem;
+}
+.alert-time {
+  font-size: 0.75rem;
+  color: #888;
+  margin-top: 0.2rem;
+}
+.btn-resolve {
+  padding: 0.3rem 0.7rem;
+  background: #f1f3f4;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 0.8rem;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.btn-resolve:hover {
+  background: #e8eaed;
+}
+
+.btn-unban {
+  padding: 0.3rem 0.7rem;
+  background: #e8f5e9;
+  border: 1px solid #a5d6a7;
+  border-radius: 4px;
+  font-size: 0.8rem;
+  cursor: pointer;
+  color: #2d9144;
+  font-weight: 600;
+}
+.btn-unban:hover {
+  background: #c8e6c9;
+}
+
+.empty-msg {
+  text-align: center;
+  color: #999;
+  padding: 2rem;
+}
+
+/* ── Admin nav ────────────────────────────────────────────────── */
+.nav-admin {
+  background: #1a1a2e;
+}
+.nav-admin .nav-links a {
+  opacity: 0.75;
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
+  transition: all 0.15s;
+}
+.nav-admin .nav-links a:hover,
+.nav-admin .nav-links a.active {
+  opacity: 1;
+  background: rgba(255, 255, 255, 0.15);
+  text-decoration: none;
+}
+.nav-admin .nav-logout {
+  border-left: 1px solid rgba(255, 255, 255, 0.2);
+  padding-left: 1rem;
+  margin-left: 0.5rem;
+}
+
+/* ── Admin panel layout ───────────────────────────────────────── */
+.admin-panel {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 1.5rem 1rem;
+}
+.panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1.2rem;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+.panel-header h2 {
+  font-size: 1.4rem;
+}
+.btn-refresh {
+  padding: 0.4rem 1rem;
+  background: white;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.85rem;
+}
+.btn-refresh:hover {
+  background: #f0f0f0;
+}
+
+/* ── Search filter ────────────────────────────────────────────── */
+.filter-row input {
+  padding: 0.5rem 0.9rem;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  width: 300px;
+}
+
+/* ── Table wrap ───────────────────────────────────────────────── */
+.table-wrap {
+  overflow-x: auto;
+  border-radius: 10px;
+  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.08);
+}
+.college-id {
+  font-size: 0.75rem;
+  color: #888;
+  font-family: monospace;
+}
+.gps-cell {
+  font-size: 0.8rem;
+  font-family: monospace;
+  color: #555;
+}
+.badge-admin {
+  background: #e8eaf6;
+  color: #3949ab;
+}
+.resolved-label {
+  font-size: 0.78rem;
+  color: #aaa;
+}
+
+/* ── Live map ─────────────────────────────────────────────────── */
+#liveMap {
+  width: 100%;
+  height: 520px;
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.12);
+}
+.map-info-bar {
+  padding: 0.6rem 0.9rem;
+  background: white;
+  border: 1px solid #eee;
+  border-radius: 8px;
+  margin-bottom: 0.75rem;
+  font-size: 0.9rem;
+  min-height: 2.2rem;
+}
+.map-info-none {
+  color: #999;
+}
+
+/* Map markers */
+.map-marker {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  font-size: 1rem;
+  font-weight: 700;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
+  border: 2px solid white;
+}
+.bike-marker {
+  width: 36px;
+  height: 36px;
+  background: #1a73e8;
+  font-size: 1.1rem;
+}
+.bike-marker.overdue {
+  background: #e53935;
+  animation: pulse 1.2s infinite;
+}
+.stand-marker {
+  width: 28px;
+  height: 28px;
+  background: #34a853;
+  color: white;
+  font-size: 0.75rem;
+}
+@keyframes pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(229, 57, 53, 0.5);
+  }
+  70% {
+    box-shadow: 0 0 0 10px rgba(229, 57, 53, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(229, 57, 53, 0);
+  }
+}
