@@ -90,6 +90,7 @@ function handleStandOtp(standId, otp) {
   }
 
   const t = now();
+  let matched = false;
 
   for (const booking of bookings) {
     // Expire stale bookings
@@ -100,14 +101,12 @@ function handleStandOtp(standId, otp) {
     }
 
     if (bcrypt.compareSync(otp, booking.otp_hash)) {
-      run(
-        "UPDATE bookings SET status='ACTIVE',picked_up_at=?,otp_hash='' WHERE id=?",
-        [t, booking.id],
-      );
+      run("UPDATE bookings SET status='ACTIVE',picked_up_at=?,otp_hash='' WHERE id=?", [t, booking.id]);
       run("UPDATE bikes SET status='IN_USE' WHERE id=?", [booking.bike_id]);
       publishStandResult(standId, "UNLOCKED", "Bike unlocked!");
       console.log(`[STAND ${standId}] Bike #${booking.bike_id} unlocked via keypad ✓`);
-      return;
+      matched = true;
+      break;
     }
 
     // Wrong OTP — increment attempts
@@ -117,30 +116,24 @@ function handleStandOtp(standId, otp) {
     if (attempts >= 3) {
       run("UPDATE bookings SET status='FLAGGED' WHERE id=?", [booking.id]);
       run("UPDATE bikes SET status='AVAILABLE' WHERE id=?", [booking.bike_id]);
-      run(
-        "INSERT INTO alerts (type,booking_id,message) VALUES ('OTP_BRUTE_FORCE',?,?)",
-        [
-          booking.id,
-          `3 failed OTP attempts at stand #${standId}. Possible unauthorized access.`,
-        ],
-      );
+      run("INSERT INTO alerts (type,booking_id,message) VALUES ('OTP_BRUTE_FORCE',?,?)", [
+        booking.id,
+        `3 failed OTP attempts at stand #${standId}. Possible unauthorized access.`,
+      ]);
       publishStandResult(standId, "LOCKED", "Too many wrong attempts. Guard alerted.");
-      console.log(`[STAND ${standId}] Brute force detected — guard alerted`);
-      return;
+      matched = true;
+      break;
     }
 
-    publishStandResult(
-      standId,
-      "WRONG",
-      `Wrong OTP. ${3 - attempts} attempt(s) remaining.`,
-    );
-    return;
+    publishStandResult(standId, "WRONG", `Wrong OTP. ${3 - attempts} attempt(s) remaining.`);
+    matched = true;
+    break;
   }
 
-  // Every booking at this stand was already expired
-  publishStandResult(standId, "EXPIRED", "OTP expired. Please make a new booking.");
+  if (!matched) {
+    publishStandResult(standId, "EXPIRED", "OTP expired. Please make a new booking.");
+  }
 }
-
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 function haversineMeters(lat1, lng1, lat2, lng2) {
