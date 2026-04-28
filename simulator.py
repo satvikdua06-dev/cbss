@@ -18,155 +18,150 @@ try:
     MQTT_AVAILABLE = True
 except ImportError:
     print("paho-mqtt not found. Run: pip install paho-mqtt")
-    print("Falling back to HTTP for GPS pings.")
+    print("Falling back to HTTP where possible.")
     MQTT_AVAILABLE = False
 
-BASE_URL  = "http://localhost:3000"
-API_KEY   = "cbss-internal-key-123"
-HEADERS   = {"Content-Type": "application/json", "x-api-key": API_KEY}
+BASE_URL = "http://localhost:3000"
+API_KEY = "cbss-internal-key-123"
+HEADERS = {"Content-Type": "application/json", "x-api-key": API_KEY}
 
 MQTT_BROKER = "broker.hivemq.com"
-MQTT_PORT   = 1883
+MQTT_PORT = 1883
 
 STAND_COORDS = [
     (26.8505, 75.8000),
     (26.8515, 75.8010),
 ]
 
-# ── Helpers ───────────────────────────────────────────────────────────────────
 
 def haversine(lat1, lng1, lat2, lng2):
-    R = 6371000
-    dLat = math.radians(lat2 - lat1)
-    dLng = math.radians(lng2 - lng1)
-    a = (math.sin(dLat/2)**2
-         + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2))
-         * math.sin(dLng/2)**2)
-    return R * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+    r = 6371000
+    dlat = math.radians(lat2 - lat1)
+    dlng = math.radians(lng2 - lng1)
+    a = (
+        math.sin(dlat / 2) ** 2
+        + math.cos(math.radians(lat1))
+        * math.cos(math.radians(lat2))
+        * math.sin(dlng / 2) ** 2
+    )
+    return r * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+
 
 def min_dist(lat, lng):
-    return min(haversine(lat, lng, s[0], s[1]) for s in STAND_COORDS)
+    return min(haversine(lat, lng, stand[0], stand[1]) for stand in STAND_COORDS)
 
-# ── MQTT client ───────────────────────────────────────────────────────────────
 
-_mqtt = None
-
-def _on_connect(client, userdata, flags, rc):
-    if rc == 0:
-        bike_id = userdata.get("bike_id")
-        topic = f"cbss/bike/{bike_id}/command"
-        client.subscribe(topic)
-        print(f"  [MQTT] Connected — subscribed to {topic}")
-    else:
-        print(f"  [MQTT] Connection failed (rc={rc})")
-
-def _on_message(client, userdata, msg):
-    try:
-        data = json.loads(msg.payload.decode())
-        cmd  = data.get("command", "?").upper()
-        print(f"  [MQTT] << Command received: {cmd}")
-    except Exception:
-        pass
-
-def setup_mqtt(bike_id):
-    global _mqtt
+def mqtt_client(client_id, userdata=None):
     if not MQTT_AVAILABLE:
-        return None
-    client = mqtt_lib.Client(
-        client_id=f"cbss-sim-{uuid.uuid4().hex[:8]}",
-        userdata={"bike_id": bike_id},
-    )
-    client.on_connect = _on_connect
-    client.on_message = _on_message
+      return None
+
+    client = mqtt_lib.Client(client_id=client_id, userdata=userdata or {})
     try:
         client.connect(MQTT_BROKER, MQTT_PORT, keepalive=60)
         client.loop_start()
-        time.sleep(1.0)   # wait for on_connect
-    except Exception as e:
-        print(f"  [MQTT] Could not connect to broker: {e}")
-        print("  Falling back to HTTP for GPS pings.")
+        time.sleep(1.0)
+        return client
+    except Exception as exc:
+        print(f"  [MQTT] Could not connect to broker: {exc}")
         return None
-    _mqtt = client
-    return client
 
-def send_gps(bike_id, lat, lng, battery, mqtt_client=None):
-    if mqtt_client is not None:
-        payload = json.dumps({"bikeId": bike_id, "lat": lat, "lng": lng, "battery": battery})
-        mqtt_client.publish(f"cbss/bike/{bike_id}/gps", payload)
-    else:
-        try:
-            r = requests.post(
-                BASE_URL + "/bike/gps",
-                json={"bikeId": bike_id, "lat": lat, "lng": lng, "battery": battery},
-                headers=HEADERS, timeout=5,
-            )
-            if r.status_code != 200:
-                print("  GPS ping failed: " + r.text)
-        except Exception as e:
-            print("  GPS error: " + str(e))
-            sys.exit(1)
 
-# ── OTP command ───────────────────────────────────────────────────────────────
+def send_bike_location(bike_id, lat, lng, battery, mqtt_conn=None):
+    payload = {"bikeId": bike_id, "lat": lat, "lng": lng, "battery": battery}
+    if mqtt_conn is not None:
+        mqtt_conn.publish(f"cbss/bike/{bike_id}/location", json.dumps(payload))
+        return
 
-def post_otp(bike_id, otp):
-    try:
-        r = requests.post(
-            BASE_URL + "/stand/otp",
-            json={"bikeId": bike_id, "otp": otp},
-            headers=HEADERS, timeout=5,
-        )
-        return r.json()
-    except Exception as e:
-        print("  OTP error: " + str(e))
-        sys.exit(1)
+    response = requests.post(
+        BASE_URL + "/bike/gps",
+        json=payload,
+        headers=HEADERS,
+        timeout=5,
+    )
+    if response.status_code != 200:
+        raise RuntimeError(response.text)
 
-def cmd_otp(args):
+
+def send_bike_status(bike_id, lock_state=None, battery=None, online=True):
+    payload = {"bikeId": bike_id, "online": online}
+    if lock_state:
+        payload["lockState"] = lock_state
+    if battery is not None:
+        payload["battery"] = battery
+
+    response = requests.post(
+        BASE_URL + "/bike/status",
+        json=payload,
+        headers=HEADERS,
+        timeout=5,
+    )
+    return response.json()
+
+
+def post_stand_status(stand_id, state, online=True):
+    response = requests.post(
+        BASE_URL + "/stand/status",
+        json={"standId": stand_id, "state": state, "online": online},
+        headers=HEADERS,
+        timeout=5,
+    )
+    return response.json()
+
+
+def post_stand_otp(stand_id, otp):
+    response = requests.post(
+        BASE_URL + "/stand/otp",
+        json={"standId": stand_id, "otp": otp},
+        headers=HEADERS,
+        timeout=5,
+    )
+    return response.json()
+
+
+def cmd_stand(args):
     print("==================================================")
-    print("  CBSS Stand Simulator - Bike #" + str(args.bike))
+    print(f"  CBSS Stand Simulator - Stand #{args.stand}")
     print("==================================================")
+
+    post_stand_status(args.stand, "READY", True)
 
     if args.brute_force:
         print("  [BRUTE FORCE] Trying 3 wrong OTPs...")
         for attempt in range(1, 4):
             wrong = str(random.randint(100000, 999999))
-            print("  Attempt " + str(attempt) + "/3 - OTP: " + wrong)
-            result = post_otp(args.bike, wrong)
-            print("  -> " + str(result.get("result")) + ": " + str(result.get("message", "")))
+            result = post_stand_otp(args.stand, wrong)
+            print(f"  Attempt {attempt}/3 -> {result.get('result')}: {result.get('message', '')}")
             time.sleep(1)
         return
 
     code = args.code or input("  Enter OTP: ").strip()
-    print("  Submitting OTP: " + code)
-    result = post_otp(args.bike, code)
-    print("  -> " + result.get("result", "ERROR") + ": " + result.get("message", result.get("error", "")))
+    result = post_stand_otp(args.stand, code)
+    print(f"  -> {result.get('result', 'ERROR')}: {result.get('message', result.get('error', ''))}")
 
-# ── GPS command ───────────────────────────────────────────────────────────────
 
-def cmd_gps(args):
+def cmd_bike(args):
     print("==================================================")
-    print("  CBSS GPS Simulator - Bike #" + str(args.bike))
-    print("  Mode: " + args.route)
+    print(f"  CBSS Bike Simulator - Bike #{args.bike}")
+    print(f"  Mode: {args.route}")
     print("==================================================")
 
-    mqtt_client = setup_mqtt(args.bike)
-    transport   = "MQTT" if mqtt_client else "HTTP"
-    print(f"  Transport: {transport}")
-    print("")
+    mqtt_conn = mqtt_client(
+        client_id=f"cbss-bike-sim-{uuid.uuid4().hex[:8]}",
+        userdata={"bike_id": args.bike},
+    )
+    print(f"  Transport: {'MQTT' if mqtt_conn else 'HTTP'}")
 
-    # Battery starts between 60-100 % and drains 1-3 % per ping
     battery = random.randint(60, 100)
+    send_bike_status(args.bike, lock_state="LOCKED", battery=battery, online=True)
 
-    def ping(bike_id, lat, lng, index, total):
+    def ping(lat, lng, index, total):
         nonlocal battery
         battery = max(0, battery - random.randint(1, 3))
-        send_gps(bike_id, lat, lng, battery, mqtt_client)
+        send_bike_location(args.bike, lat, lng, battery, mqtt_conn)
         dist = round(min_dist(lat, lng))
         print(
-            f"  Ping {index}/{total}"
-            f"  lat={round(lat,5)}"
-            f"  lng={round(lng,5)}"
-            f"  dist={dist}m"
-            f"  batt={battery}%"
+            f"  Ping {index}/{total}  lat={round(lat, 5)}  lng={round(lng, 5)}"
+            f"  dist={dist}m  batt={battery}%"
         )
 
     if args.route == "normal":
@@ -178,91 +173,65 @@ def cmd_gps(args):
             (26.8505, 75.8001),
             (26.8505, 75.8000),
         ]
-        print("  Bike takes a campus loop and returns to the stand.")
-        print("  5 s between pings. Ctrl+C to stop.")
-        print("")
-        for i, wp in enumerate(waypoints, 1):
-            lat = wp[0] + random.uniform(-0.00002, 0.00002)
-            lng = wp[1] + random.uniform(-0.00002, 0.00002)
-            ping(args.bike, lat, lng, i, len(waypoints))
-            if i < len(waypoints):
-                time.sleep(5)
-        print("")
-        print("  Done. Bike is back at the stand.")
-
     elif args.route == "misbehave":
         waypoints = [
             (26.8505, 75.8000),
-            (26.8490, 75.7980),   # leaves campus boundary here
+            (26.8490, 75.7980),
             (26.8475, 75.7960),
             (26.8460, 75.7940),
             (26.8450, 75.7930),
         ]
-        print("  Bike leaves campus — triggers geofence alert.")
-        print("  5 s between pings. Ctrl+C to stop.")
-        print("")
-        for i, wp in enumerate(waypoints, 1):
-            lat = wp[0] + random.uniform(-0.00005, 0.00005)
-            lng = wp[1] + random.uniform(-0.00005, 0.00005)
-            ping(args.bike, lat, lng, i, len(waypoints))
-            if i < len(waypoints):
-                time.sleep(5)
-
-        print("")
-        print("  Bike is away. Pinging every 10 s. Ctrl+C to stop.")
-        print("")
-        count = 0
-        while True:
-            count += 1
-            lat = 26.8450 + random.uniform(-0.0001, 0.0001)
-            lng = 75.7930 + random.uniform(-0.0001, 0.0001)
-            ping(args.bike, lat, lng, count, "?")
-            time.sleep(10)
-
-    elif args.route == "tamper":
-        print("  Simulates a parked bike (AVAILABLE) moving — triggers tamper alert.")
-        print("  5 s between pings. Ctrl+C to stop.")
-        print("")
-        tamper_path = [
+    else:
+        waypoints = [
             (26.8505, 75.8000),
             (26.8507, 75.8003),
-            (26.8510, 75.8007),   # > 20 m from stand
+            (26.8510, 75.8007),
             (26.8514, 75.8012),
         ]
-        for i, wp in enumerate(tamper_path, 1):
-            lat = wp[0] + random.uniform(-0.00002, 0.00002)
-            lng = wp[1] + random.uniform(-0.00002, 0.00002)
-            ping(args.bike, lat, lng, i, len(tamper_path))
-            if i < len(tamper_path):
-                time.sleep(5)
+
+    for index, waypoint in enumerate(waypoints, 1):
+        lat = waypoint[0] + random.uniform(-0.00003, 0.00003)
+        lng = waypoint[1] + random.uniform(-0.00003, 0.00003)
+        ping(lat, lng, index, len(waypoints))
+        if index < len(waypoints):
+            time.sleep(5)
+
+    if args.route == "misbehave":
         print("")
-        print("  Done. Check admin alerts for TAMPER alert.")
+        print("  Bike is away. Pinging every 10 s. Ctrl+C to stop.")
+        counter = 0
+        while True:
+            counter += 1
+            lat = 26.8450 + random.uniform(-0.0001, 0.0001)
+            lng = 75.7930 + random.uniform(-0.0001, 0.0001)
+            ping(lat, lng, counter, "?")
+            time.sleep(10)
 
-    if mqtt_client:
+    if mqtt_conn:
         time.sleep(1)
-        mqtt_client.loop_stop()
-        mqtt_client.disconnect()
+        mqtt_conn.loop_stop()
+        mqtt_conn.disconnect()
 
-# ── Main ──────────────────────────────────────────────────────────────────────
 
 parser = argparse.ArgumentParser(prog="simulator", description="CBSS Simulator")
 sub = parser.add_subparsers(dest="cmd")
 sub.required = True
 
-p_otp = sub.add_parser("otp", help="Simulate OTP entry at a stand")
-p_otp.add_argument("--bike", type=int, required=True, help="Bike ID")
-p_otp.add_argument("--code", type=str, default=None, help="OTP code")
-p_otp.add_argument("--brute-force", dest="brute_force", action="store_true")
-p_otp.set_defaults(func=cmd_otp)
+stand_parser = sub.add_parser("stand", help="Simulate OTP entry at a stand")
+stand_parser.add_argument("--stand", type=int, required=True, help="Stand ID")
+stand_parser.add_argument("--code", type=str, default=None, help="OTP code")
+stand_parser.add_argument("--brute-force", dest="brute_force", action="store_true")
+stand_parser.set_defaults(func=cmd_stand)
 
-p_gps = sub.add_parser("gps", help="Simulate GPS pings from a bike")
-p_gps.add_argument("--bike", type=int, required=True, help="Bike ID")
-p_gps.add_argument(
-    "--mode", dest="route",
+bike_parser = sub.add_parser("bike", help="Simulate GPS pings from a bike ESP")
+bike_parser.add_argument("--bike", type=int, required=True, help="Bike ID")
+bike_parser.add_argument(
+    "--mode",
+    dest="route",
     choices=["normal", "misbehave", "tamper"],
     default="normal",
 )
-p_gps.set_defaults(func=cmd_gps)
+bike_parser.set_defaults(func=cmd_bike)
 
 try:
     args = parser.parse_args()
