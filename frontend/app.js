@@ -164,6 +164,9 @@ async function loadHome() {
         <h3>&#128205; ${esc(s.name)}</h3>
         <div class="${s.available_bikes > 0 ? "stand-avail" : "stand-avail stand-zero"}">${s.available_bikes}</div>
         <div class="stand-avail-label">bike${s.available_bikes !== 1 ? "s" : ""} available</div>
+        <div class="stand-meta">
+          ${s.booked_bikes ? `${s.booked_bikes} booked` : "No bikes on hold"} &bull; ${s.online ? "Stand online" : "Stand offline"}
+        </div>
       </div>
     `,
       )
@@ -183,17 +186,29 @@ async function openStand(standId, standName) {
     const bikes = await apiFetch("/stands/" + standId + "/bikes");
     if (!bikes.length) {
       document.getElementById("modalBikesList").innerHTML =
-        '<p class="empty-msg">No bikes available.</p>';
+        '<p class="empty-msg">No bikes are currently docked at this stand.</p>';
       return;
     }
     document.getElementById("modalBikesList").innerHTML = bikes
       .map(
-        (b) => `
-      <div class="bike-row">
-        <div><div class="bike-code">${esc(b.code)}</div><div class="bike-status">Available &nbsp;${batteryHtml(b.battery_level)}</div></div>
-        <button class="btn-small" onclick="openBookModal(${b.id},'${esc(b.code)}')">Book</button>
+        (b) => {
+          const isAvailable = b.status === "AVAILABLE";
+          const statusLabel = formatBikeStatus(b);
+          return `
+      <div class="bike-row ${isAvailable ? "" : "bike-row-disabled"}">
+        <div>
+          <div class="bike-code">${esc(b.code)}</div>
+          <div class="bike-status">${statusLabel} &nbsp;${batteryHtml(b.battery_level)}</div>
+        </div>
+        <button
+          class="btn-small ${isAvailable ? "" : "btn-disabled"}"
+          ${isAvailable ? `onclick="openBookModal(${b.id},'${esc(b.code)}')"` : "disabled"}
+        >
+          ${isAvailable ? "Book" : "Unavailable"}
+        </button>
       </div>
-    `,
+    `;
+        },
       )
       .join("");
   } catch (e) {
@@ -493,6 +508,14 @@ function buildBookingTable(bookings, showUser) {
         <tbody>${rows}</tbody>
       </table>
     </div>`;
+}
+
+function formatBikeStatus(bike) {
+  if (bike.status === "AVAILABLE") return "Available";
+  if (bike.status === "BOOKED") return "Booked for pickup";
+  if (bike.status === "IN_USE") return "Currently in use";
+  if (bike.status === "MISSING") return "Marked missing";
+  return esc(bike.status || "Unknown");
 }
 
 // ── Admin: Live Map ───────────────────────────────────────────────────────────

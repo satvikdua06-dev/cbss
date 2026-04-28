@@ -145,6 +145,13 @@ nav {
   cursor: pointer;
   font-weight: 600;
 }
+.btn-small:disabled,
+.btn-disabled {
+  background: #f1f3f4;
+  color: #888;
+  border-color: #c7c7c7;
+  cursor: not-allowed;
+}
 .btn-back {
   background: none;
   border: none;
@@ -250,6 +257,11 @@ nav {
 .stand-avail-label {
   font-size: 0.8rem;
   color: #888;
+}
+.stand-meta {
+  margin-top: 0.45rem;
+  font-size: 0.8rem;
+  color: #5f6368;
 }
 .stand-zero {
   color: #999;
@@ -365,6 +377,9 @@ nav {
   align-items: center;
   padding: 0.75rem 0;
   border-bottom: 1px solid #f0f0f0;
+}
+.bike-row-disabled {
+  opacity: 0.82;
 }
 .bike-row:last-child {
   border-bottom: none;
