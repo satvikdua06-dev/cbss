@@ -386,6 +386,13 @@ function pointInPolygon(lat, lng, polygon) {
   return inside;
 }
 
+function findTrackableBookingForBike(bikeId) {
+  return queryOne(
+    "SELECT id, status FROM bookings WHERE bike_id=? AND status IN ('ACTIVE','FLAGGED') ORDER BY created_at DESC LIMIT 1",
+    [bikeId],
+  );
+}
+
 function handleGpsPing(bikeId, lat, lng, battery) {
   const bike = findBikeByAnyId(bikeId);
   if (!bike) return;
@@ -409,10 +416,7 @@ function handleGpsPing(bikeId, lat, lng, battery) {
 
   logBikeEvent(bike.id, "LOCATION", { lat, lng, battery });
 
-  const booking = queryOne(
-    "SELECT id FROM bookings WHERE bike_id=? AND status='ACTIVE'",
-    [bike.id],
-  );
+  const booking = findTrackableBookingForBike(bike.id);
   if (booking) {
     run(
       "INSERT INTO bike_gps_history (bike_id,booking_id,lat,lng) VALUES (?,?,?,?)",
@@ -439,7 +443,7 @@ function handleGpsPing(bikeId, lat, lng, battery) {
     }
   }
 
-  if (bike.status === "IN_USE" && booking) {
+  if ((bike.status === "IN_USE" || bike.status === "MISSING") && booking) {
     if (!pointInPolygon(lat, lng, CAMPUS_POLYGON)) {
       const existing = queryOne(
         "SELECT id FROM alerts WHERE type='OUT_OF_BOUNDS' AND booking_id=?",
@@ -799,7 +803,7 @@ app.get("/admin/bookings", requireAdmin, (req, res) => {
 });
 
 app.get("/admin/bike-paths", requireAdmin, (req, res) => {
-  const active = query("SELECT id FROM bookings WHERE status='ACTIVE'");
+  const active = query("SELECT id FROM bookings WHERE status IN ('ACTIVE','FLAGGED')");
   const result = {};
   for (const booking of active) {
     result[booking.id] = query(
@@ -813,11 +817,12 @@ app.get("/admin/bike-paths", requireAdmin, (req, res) => {
 app.get("/admin/live-bikes", requireAdmin, (req, res) => {
   res.json(
     query(`SELECT bk.id, bk.code, bk.last_lat, bk.last_lng, bk.battery_level, bk.lock_state,
-                  u.name as user_name, u.college_id, b.return_by, b.picked_up_at, b.id as booking_id
+                  u.name as user_name, u.college_id, b.return_by, b.picked_up_at, b.id as booking_id,
+                  b.status as booking_status, bk.status as bike_status
            FROM bikes bk
-           JOIN bookings b ON b.bike_id=bk.id AND b.status='ACTIVE'
+           JOIN bookings b ON b.bike_id=bk.id AND b.status IN ('ACTIVE','FLAGGED')
            JOIN users u ON b.user_id=u.id
-           WHERE bk.status='IN_USE'`),
+           WHERE bk.status IN ('IN_USE','MISSING')`),
   );
 });
 
