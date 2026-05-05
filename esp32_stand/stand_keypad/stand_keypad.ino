@@ -26,8 +26,8 @@
 
 LiquidCrystal_I2C lcd(0x27, 16, 2);
 
-const char* WIFI_SSID   = "YOUR_WIFI_SSID";
-const char* WIFI_PASS   = "YOUR_WIFI_PASSWORD";
+const char* WIFI_SSID   = "Satvik";
+const char* WIFI_PASS   = "ihhd80013";
 const char* MQTT_BROKER = "broker.hivemq.com";
 const int   MQTT_PORT   = 1883;
 

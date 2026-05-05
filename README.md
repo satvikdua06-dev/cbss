@@ -127,4 +127,5 @@ python simulator.py bike --bike 1 --mode tamper
 
 - OTPs are still returned in the booking API for demo/testing.
 - The stand ESP code expects a 16x2 I2C LCD and a 4x4 keypad.
-- The bike ESP firmware is not in this repo yet, but the Raspberry Pi backend is ready for it now.
+- A real bike ESP sketch is available at `esp32_bike/bike_tracker/bike_tracker.ino` for GPS-based telemetry.
+- Update the bike sketch Wi-Fi credentials, bike identity, GPS UART pins, and optional battery pin before flashing.
