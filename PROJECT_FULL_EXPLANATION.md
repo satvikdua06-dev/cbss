@@ -107,6 +107,7 @@ Communication methods:
 - HTTP/REST: browser frontend talks to backend.
 - MQTT: ESP devices and simulator talk to backend.
 - SQLite database: backend stores system state locally.
+- ThingSpeak: optional cloud channel for bike telemetry and alert status.
 
 MQTT broker:
 
@@ -125,6 +126,8 @@ cbss/bike/{bikeId}/gps
 cbss/bike/{bikeId}/status
 cbss/bike/{bikeId}/command
 ```
+
+ThingSpeak is not used for control decisions. The Raspberry Pi remains the main controller. ThingSpeak is used as a cloud logging/dashboard layer for project guideline compliance and remote visualization.
 
 ### 3.3 Backend Layer
 
@@ -428,6 +431,7 @@ Explanation:
 const JWT_SECRET = "cbss-secret-key";
 const INTERNAL_API_KEY = "cbss-internal-key-123";
 const MQTT_BROKER = "mqtt://broker.hivemq.com";
+const THINGSPEAK_WRITE_API_KEY = process.env.THINGSPEAK_WRITE_API_KEY || "";
 ```
 
 Explanation:
@@ -435,10 +439,56 @@ Explanation:
 - `JWT_SECRET`: signs login tokens.
 - `INTERNAL_API_KEY`: protects internal simulator/device HTTP endpoints.
 - `MQTT_BROKER`: public MQTT broker used by backend and devices.
+- `THINGSPEAK_WRITE_API_KEY`: optional cloud upload key. If not set, the project runs without ThingSpeak.
 
 For production, these should be moved into environment variables.
 
-### 6.4 Campus Polygon
+### 6.4 ThingSpeak Constants And Codes
+
+The backend maps bike state into ThingSpeak fields:
+
+```text
+field1 = Bike ID
+field2 = Latitude
+field3 = Longitude
+field4 = Battery percentage
+field5 = Lock state code
+field6 = Bike status code
+field7 = Alert code
+field8 = Stand ID
+```
+
+Lock state codes:
+
+```text
+0 = UNLOCKED
+1 = LOCKED
+```
+
+Bike status codes:
+
+```text
+0 = AVAILABLE
+1 = BOOKED
+2 = IN_USE
+3 = MISSING
+```
+
+Alert codes:
+
+```text
+0 = NONE
+1 = TAMPER
+2 = OUT_OF_BOUNDS
+3 = LOW_BATTERY
+4 = OTP_BRUTE_FORCE
+5 = OVERDUE_USER
+6 = OVERDUE_GUARD
+```
+
+The backend throttles updates so it does not send data faster than ThingSpeak allows.
+
+### 6.5 Campus Polygon
 
 ```js
 const CAMPUS_POLYGON = [
@@ -454,7 +504,7 @@ Explanation:
 - These coordinates define the allowed campus boundary.
 - If a bike goes outside this polygon, the backend creates an out-of-bounds alert.
 
-### 6.5 MQTT Connection
+### 6.6 MQTT Connection
 
 ```js
 const mqttClient = mqtt.connect(MQTT_BROKER, {
@@ -467,7 +517,7 @@ Explanation:
 - Connects the backend to HiveMQ.
 - Uses a random client id so multiple test runs do not clash.
 
-### 6.6 MQTT Subscribe On Connect
+### 6.7 MQTT Subscribe On Connect
 
 The backend subscribes to:
 
@@ -485,7 +535,7 @@ Explanation:
 - It lets the server listen to all stands and bikes.
 - Example: `cbss/stand/1/otp` and `cbss/stand/2/otp` are both accepted.
 
-### 6.7 MQTT Message Router
+### 6.8 MQTT Message Router
 
 Purpose:
 
@@ -505,14 +555,41 @@ MQTT message arrives
 -> if bike status, call handleBikeStatusTopic()
 ```
 
-### 6.8 `mqttPublish(topic, payload)`
+### 6.9 `mqttPublish(topic, payload)`
 
 Purpose:
 
 - Convert JavaScript object to JSON.
 - Publish it to MQTT.
 
-### 6.9 Event Logging Helpers
+### 6.10 ThingSpeak Helper Functions
+
+`queueThingSpeakUpdate()`:
+
+- Receives field values.
+- Cleans empty values.
+- Stores the latest update.
+- Sends immediately if allowed by the update interval.
+- Otherwise waits and sends the latest pending update.
+
+`sendThingSpeakUpdate()`:
+
+- Sends HTTP POST to `https://api.thingspeak.com/update.json`.
+- Includes the ThingSpeak Write API Key.
+- Sends `field1` through `field8`.
+- Logs success or rejection in the backend console.
+
+`publishBikeThingSpeak()`:
+
+- Converts a bike object into ThingSpeak fields.
+- Includes bike id, GPS, battery, lock state, bike status, alert code, and stand id.
+
+`publishBikeStateThingSpeak()`:
+
+- Loads the latest bike state from the database.
+- Sends it to ThingSpeak.
+
+### 6.11 Event Logging Helpers
 
 `logStandEvent()`:
 
@@ -524,7 +601,7 @@ Purpose:
 
 These are useful for debugging and audit history.
 
-### 6.10 `publishLockCommand(bikeId, command)`
+### 6.12 `publishLockCommand(bikeId, command)`
 
 Purpose:
 
@@ -547,7 +624,7 @@ Payload example:
 }
 ```
 
-### 6.11 `publishStandResult(standId, result, message, extra)`
+### 6.13 `publishStandResult(standId, result, message, extra)`
 
 Purpose:
 
@@ -570,7 +647,7 @@ NO_BOOKING
 ERROR
 ```
 
-### 6.12 `markStandSeen()` And `markBikeSeen()`
+### 6.14 `markStandSeen()` And `markBikeSeen()`
 
 Purpose:
 
@@ -579,7 +656,7 @@ Purpose:
 
 This helps admin know whether devices are active.
 
-### 6.13 Lookup Helpers
+### 6.15 Lookup Helpers
 
 `findStandByAnyId(identifier)`:
 
@@ -591,7 +668,7 @@ This helps admin know whether devices are active.
 
 This makes MQTT and HTTP flexible because devices may send either id or code.
 
-### 6.14 `findPendingBookingsForStand(standId)`
+### 6.16 `findPendingBookingsForStand(standId)`
 
 Purpose:
 
@@ -605,7 +682,7 @@ WHERE bk.stand_id = ? AND b.status = 'PENDING_OTP'
 
 This means only bikes currently docked at that stand can be unlocked from that stand.
 
-### 6.15 `expirePendingBooking(booking)`
+### 6.17 `expirePendingBooking(booking)`
 
 Purpose:
 
@@ -613,7 +690,7 @@ Purpose:
 - Makes the bike `AVAILABLE` again.
 - Keeps bike locked.
 
-### 6.16 `unlockBooking(booking, stand)`
+### 6.18 `unlockBooking(booking, stand)`
 
 Purpose:
 
@@ -632,7 +709,7 @@ Step-by-step:
 
 This is the core unlock logic of the project.
 
-### 6.17 `failBookingOtp(booking, stand)`
+### 6.19 `failBookingOtp(booking, stand)`
 
 Purpose:
 
@@ -650,7 +727,7 @@ Alert type:
 OTP_BRUTE_FORCE
 ```
 
-### 6.18 `handleStandOtp(standId, otp, metadata)`
+### 6.20 `handleStandOtp(standId, otp, metadata)`
 
 This is the most important OTP function.
 
@@ -670,7 +747,7 @@ Step-by-step:
 
 This is why the backend, not the ESP, decides which bike unlocks.
 
-### 6.19 `handleStandOtpTopic()`
+### 6.21 `handleStandOtpTopic()`
 
 Purpose:
 
@@ -688,7 +765,7 @@ Example input:
 }
 ```
 
-### 6.20 `handleStandStatusTopic()`
+### 6.22 `handleStandStatusTopic()`
 
 Purpose:
 
@@ -696,7 +773,7 @@ Purpose:
 - Marks stand seen.
 - Logs stand status event.
 
-### 6.21 `handleBikeLocationTopic()`
+### 6.23 `handleBikeLocationTopic()`
 
 Purpose:
 
@@ -704,7 +781,7 @@ Purpose:
 - Converts `lat`, `lng`, and `battery` to numbers.
 - Calls `handleGpsPing()`.
 
-### 6.22 `handleBikeStatusTopic()`
+### 6.24 `handleBikeStatusTopic()`
 
 Purpose:
 
@@ -712,7 +789,7 @@ Purpose:
 - Updates lock state, battery level, online state.
 - Logs bike status.
 
-### 6.23 `haversineMeters()`
+### 6.25 `haversineMeters()`
 
 Purpose:
 
@@ -723,7 +800,7 @@ Used for:
 - Checking if bike is near a stand.
 - Detecting tamper movement from a parked stand.
 
-### 6.24 `isAtStand(bike)`
+### 6.26 `isAtStand(bike)`
 
 Purpose:
 
@@ -735,7 +812,7 @@ Important current behavior:
 - It does not force return to original stand.
 - This means a bike can be returned to a different stand if it is physically near that stand.
 
-### 6.25 `pointInPolygon()`
+### 6.27 `pointInPolygon()`
 
 Purpose:
 
@@ -745,7 +822,7 @@ Used for:
 
 - Geofence/out-of-bounds detection.
 
-### 6.26 `findTrackableBookingForBike()`
+### 6.28 `findTrackableBookingForBike()`
 
 Purpose:
 
@@ -755,7 +832,7 @@ Why:
 
 - Live location should continue even after a bike is flagged/missing.
 
-### 6.27 `handleGpsPing(bikeId, lat, lng, battery)`
+### 6.29 `handleGpsPing(bikeId, lat, lng, battery)`
 
 This is the main location handler.
 
@@ -774,19 +851,19 @@ Step-by-step:
 
 This function powers the admin live map, path history, tamper alerts, low battery alerts, and geofence alerts.
 
-### 6.28 `generateOTP()`
+### 6.30 `generateOTP()`
 
 Purpose:
 
 - Generates a random 6-digit OTP.
 
-### 6.29 `now()`
+### 6.31 `now()`
 
 Purpose:
 
 - Returns current Unix timestamp in seconds.
 
-### 6.30 Authentication Middleware
+### 6.32 Authentication Middleware
 
 `requireAuth()`:
 
@@ -803,7 +880,7 @@ Purpose:
 
 - Protects internal simulator/device HTTP routes using `x-api-key`.
 
-### 6.31 Public Auth Routes
+### 6.33 Public Auth Routes
 
 `POST /register`:
 
@@ -822,7 +899,7 @@ Purpose:
 
 - Returns logged-in user info.
 
-### 6.32 Student Routes
+### 6.34 Student Routes
 
 `GET /stands`:
 
@@ -863,7 +940,7 @@ Purpose:
 - Assigns bike to the detected stand.
 - Publishes lock command to bike.
 
-### 6.33 Internal Simulator/Device Routes
+### 6.35 Internal Simulator/Device Routes
 
 `POST /stand/otp`:
 
@@ -883,7 +960,7 @@ Purpose:
 
 - Allows simulator/device to send stand status over HTTP.
 
-### 6.34 Admin Routes
+### 6.36 Admin Routes
 
 `GET /admin/alerts`:
 
@@ -925,7 +1002,7 @@ Purpose:
 
 - Returns currently active or flagged bikes that should appear on live map.
 
-### 6.35 `checkOverdue()`
+### 6.37 `checkOverdue()`
 
 Purpose:
 
@@ -938,7 +1015,7 @@ Behavior:
 - If overdue for the first time, create user alert.
 - If more than 15 minutes overdue, create guard alert, mark bike missing, and ban user.
 
-### 6.36 Server Start
+### 6.38 Server Start
 
 ```js
 async function start() {
@@ -1839,7 +1916,45 @@ CBSS running on http://localhost:3000
 [MQTT] Connected - subscribed to stand and bike device topics
 ```
 
-### 17.4 Open Frontend
+### 17.4 Start Backend With ThingSpeak
+
+Create a ThingSpeak channel and copy its Write API Key.
+
+Recommended channel fields:
+
+```text
+field1 = Bike ID
+field2 = Latitude
+field3 = Longitude
+field4 = Battery percentage
+field5 = Lock state code
+field6 = Bike status code
+field7 = Alert code
+field8 = Stand ID
+```
+
+On Raspberry Pi/Linux:
+
+```bash
+cd ~/Desktop/cbss/backend
+THINGSPEAK_WRITE_API_KEY=YOUR_WRITE_API_KEY node server.js
+```
+
+On Windows PowerShell:
+
+```powershell
+cd C:\Users\Satvik\Desktop\cbss\backend
+$env:THINGSPEAK_WRITE_API_KEY="YOUR_WRITE_API_KEY"
+node server.js
+```
+
+Optional slower update interval:
+
+```bash
+THINGSPEAK_WRITE_API_KEY=YOUR_WRITE_API_KEY THINGSPEAK_MIN_INTERVAL_MS=20000 node server.js
+```
+
+### 17.5 Open Frontend
 
 On Raspberry Pi browser:
 

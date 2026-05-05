@@ -59,6 +59,38 @@ The backend runs on:
 
 - [http://localhost:3000](http://localhost:3000)
 
+### Optional ThingSpeak cloud logging
+
+Create a ThingSpeak channel with these fields:
+
+- `field1`: Bike ID
+- `field2`: Latitude
+- `field3`: Longitude
+- `field4`: Battery percentage
+- `field5`: Lock state code (`0` = unlocked, `1` = locked)
+- `field6`: Bike status code (`0` = available, `1` = booked, `2` = in use, `3` = missing)
+- `field7`: Alert code (`0` = none, `1` = tamper, `2` = out of bounds, `3` = low battery, `4` = OTP brute force, `5` = overdue user, `6` = overdue guard)
+- `field8`: Stand ID (`0` when bike is not docked)
+
+Run the backend with your ThingSpeak Write API Key:
+
+```bash
+THINGSPEAK_WRITE_API_KEY=YOUR_WRITE_API_KEY node server.js
+```
+
+On Windows PowerShell:
+
+```powershell
+$env:THINGSPEAK_WRITE_API_KEY="YOUR_WRITE_API_KEY"
+node server.js
+```
+
+The backend uploads to ThingSpeak only when `THINGSPEAK_WRITE_API_KEY` is set. It throttles updates to about 16 seconds by default to match ThingSpeak rate limits. You can override that with:
+
+```bash
+THINGSPEAK_MIN_INTERVAL_MS=20000 node server.js
+```
+
 ## Seeded demo data
 
 ### Stands

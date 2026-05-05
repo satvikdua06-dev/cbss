@@ -3,6 +3,7 @@ const cors = require("cors");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const path = require("path");
+const https = require("https");
 const mqtt = require("mqtt");
 const { initDb, query, queryOne, run } = require("./db");
 
@@ -14,6 +15,9 @@ app.use(express.static(path.join(__dirname, "../frontend")));
 const JWT_SECRET = "cbss-secret-key";
 const INTERNAL_API_KEY = "cbss-internal-key-123";
 const MQTT_BROKER = "mqtt://broker.hivemq.com";
+const THINGSPEAK_WRITE_API_KEY = process.env.THINGSPEAK_WRITE_API_KEY || "";
+const THINGSPEAK_MIN_INTERVAL_MS =
+  Number(process.env.THINGSPEAK_MIN_INTERVAL_MS) || 16000;
 
 const CAMPUS_POLYGON = [
   [26.8495, 75.799],
@@ -30,6 +34,32 @@ const STAND_RESULT_STATES = new Set([
   "NO_BOOKING",
   "ERROR",
 ]);
+
+const BIKE_STATUS_CODES = {
+  AVAILABLE: 0,
+  BOOKED: 1,
+  IN_USE: 2,
+  MISSING: 3,
+};
+
+const LOCK_STATE_CODES = {
+  UNLOCKED: 0,
+  LOCKED: 1,
+};
+
+const ALERT_CODES = {
+  NONE: 0,
+  TAMPER: 1,
+  OUT_OF_BOUNDS: 2,
+  LOW_BATTERY: 3,
+  OTP_BRUTE_FORCE: 4,
+  OVERDUE_USER: 5,
+  OVERDUE_GUARD: 6,
+};
+
+let lastThingSpeakPublishAt = 0;
+let pendingThingSpeakUpdate = null;
+let thingSpeakTimer = null;
 
 const mqttClient = mqtt.connect(MQTT_BROKER, {
   clientId: "cbss-server-" + Math.random().toString(16).slice(2, 10),
@@ -79,6 +109,122 @@ mqttClient.on("error", (err) => console.error("[MQTT] Error:", err.message));
 function mqttPublish(topic, payload) {
   mqttClient.publish(topic, JSON.stringify(payload));
 }
+
+function statusCode(status) {
+  return BIKE_STATUS_CODES[String(status || "").toUpperCase()] ?? -1;
+}
+
+function lockCode(lockState) {
+  return LOCK_STATE_CODES[String(lockState || "").toUpperCase()] ?? -1;
+}
+
+function queueThingSpeakUpdate(fields, status) {
+  if (!THINGSPEAK_WRITE_API_KEY) return;
+
+  const cleanFields = {};
+  for (const [key, value] of Object.entries(fields)) {
+    if (value !== undefined && value !== null && value !== "") {
+      cleanFields[key] = value;
+    }
+  }
+
+  pendingThingSpeakUpdate = { fields: cleanFields, status };
+  flushThingSpeakUpdate();
+}
+
+function flushThingSpeakUpdate() {
+  if (!pendingThingSpeakUpdate || thingSpeakTimer) return;
+
+  const elapsed = Date.now() - lastThingSpeakPublishAt;
+  const waitMs = THINGSPEAK_MIN_INTERVAL_MS - elapsed;
+
+  if (waitMs > 0) {
+    thingSpeakTimer = setTimeout(() => {
+      thingSpeakTimer = null;
+      flushThingSpeakUpdate();
+    }, waitMs);
+    return;
+  }
+
+  const update = pendingThingSpeakUpdate;
+  pendingThingSpeakUpdate = null;
+  lastThingSpeakPublishAt = Date.now();
+  sendThingSpeakUpdate(update.fields, update.status);
+}
+
+function sendThingSpeakUpdate(fields, status) {
+  const params = new URLSearchParams();
+  params.set("api_key", THINGSPEAK_WRITE_API_KEY);
+  for (const [field, value] of Object.entries(fields)) {
+    params.set(field, String(value));
+  }
+  if (status) params.set("status", status);
+
+  const body = params.toString();
+  const req = https.request(
+    {
+      hostname: "api.thingspeak.com",
+      path: "/update.json",
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        "Content-Length": Buffer.byteLength(body),
+      },
+    },
+    (res) => {
+      let responseBody = "";
+      res.on("data", (chunk) => {
+        responseBody += chunk;
+      });
+      res.on("end", () => {
+        const response = responseBody.trim();
+        if (res.statusCode >= 400 || response === "0") {
+          console.error(
+            `[ThingSpeak] Update rejected (${res.statusCode}): ${response}`,
+          );
+          return;
+        }
+        console.log(`[ThingSpeak] Update accepted: ${response}`);
+      });
+    },
+  );
+
+  req.on("error", (err) => {
+    console.error("[ThingSpeak] Update failed:", err.message);
+  });
+
+  req.write(body);
+  req.end();
+}
+
+function publishBikeThingSpeak(bike, lat, lng, battery, alertType = "NONE") {
+  queueThingSpeakUpdate(
+    {
+      field1: bike.id,
+      field2: lat,
+      field3: lng,
+      field4: battery == null ? bike.battery_level : battery,
+      field5: lockCode(bike.lock_state),
+      field6: statusCode(bike.status),
+      field7: ALERT_CODES[alertType] ?? ALERT_CODES.NONE,
+      field8: bike.stand_id || 0,
+    },
+    `${bike.code} ${bike.status} ${alertType}`,
+  );
+}
+
+function publishBikeStateThingSpeak(bikeId, alertType = "NONE") {
+  const bike = findBikeByAnyId(bikeId);
+  if (!bike) return;
+  publishBikeThingSpeak(
+    bike,
+    bike.last_lat,
+    bike.last_lng,
+    bike.battery_level,
+    alertType,
+  );
+}
+
 
 function logStandEvent(standId, eventType, payload) {
   run(
@@ -189,6 +335,7 @@ function unlockBooking(booking, stand) {
     [booking.bike_id],
   );
   publishLockCommand(booking.bike_id, "unlock");
+  publishBikeStateThingSpeak(booking.bike_id);
   publishStandResult(stand.id, "UNLOCKED", "Bike unlocked!", {
     bikeId: booking.bike_id,
     bikeCode: booking.bike_code,
@@ -208,6 +355,7 @@ function failBookingOtp(booking, stand) {
     run("UPDATE bikes SET status='AVAILABLE', lock_state='LOCKED' WHERE id=?", [
       booking.bike_id,
     ]);
+    publishBikeStateThingSpeak(booking.bike_id, "OTP_BRUTE_FORCE");
     run(
       "INSERT INTO alerts (type,booking_id,message) VALUES ('OTP_BRUTE_FORCE',?,?)",
       [
@@ -347,6 +495,7 @@ function handleBikeStatusTopic(bikeTopicId, data) {
   }
 
   logBikeEvent(bike.id, "STATUS", data);
+  publishBikeStateThingSpeak(bike.id);
 }
 
 function haversineMeters(lat1, lng1, lat2, lng2) {
@@ -396,6 +545,7 @@ function findTrackableBookingForBike(bikeId) {
 function handleGpsPing(bikeId, lat, lng, battery) {
   const bike = findBikeByAnyId(bikeId);
   if (!bike) return;
+  let thingSpeakAlert = "NONE";
 
   markBikeSeen(bike.id, 1);
 
@@ -408,6 +558,7 @@ function handleGpsPing(bikeId, lat, lng, battery) {
       run("INSERT INTO alerts (type,message) VALUES ('LOW_BATTERY',?)", [
         `Bike ${bike.code} battery at ${battery}%. Needs charging.`,
       ]);
+      thingSpeakAlert = "LOW_BATTERY";
       console.log(`[ALERT] Low battery - ${bike.code}: ${battery}%`);
     }
   } else {
@@ -437,6 +588,7 @@ function handleGpsPing(bikeId, lat, lng, battery) {
           run("INSERT INTO alerts (type,message) VALUES ('TAMPER',?)", [
             `Tamper detected: ${bike.code} moved ${Math.round(dist)}m from ${stand.name} without a booking.`,
           ]);
+          thingSpeakAlert = "TAMPER";
           console.log(`[ALERT] Tamper - ${bike.code} is ${Math.round(dist)}m from stand`);
         }
       }
@@ -459,10 +611,13 @@ function handleGpsPing(bikeId, lat, lng, battery) {
         );
         run("UPDATE bookings SET status='FLAGGED' WHERE id=?", [booking.id]);
         run("UPDATE bikes SET status='MISSING' WHERE id=?", [bike.id]);
+        thingSpeakAlert = "OUT_OF_BOUNDS";
         console.log(`[ALERT] Geofence breach - ${bike.code}`);
       }
     }
   }
+
+  publishBikeStateThingSpeak(bike.id, thingSpeakAlert);
 }
 
 function generateOTP() {
@@ -591,6 +746,8 @@ app.get("/system/topology", requireAdmin, (req, res) => {
       role: "raspberry-pi",
       mqttBroker: MQTT_BROKER,
       apiBaseUrl: "http://localhost:3000",
+      thingSpeakEnabled: Boolean(THINGSPEAK_WRITE_API_KEY),
+      thingSpeakMinIntervalMs: THINGSPEAK_MIN_INTERVAL_MS,
     },
     stands: query(
       "SELECT id, code, name, esp_topic_id, online, last_seen_at FROM stands ORDER BY id",
@@ -709,6 +866,7 @@ app.post("/bookings/:id/return", requireAuth, (req, res) => {
     [stand.id, bike.id],
   );
   publishLockCommand(bike.id, "lock");
+  publishBikeStateThingSpeak(bike.id);
   res.json({ message: "Bike returned successfully", standId: stand.id });
 });
 
@@ -845,6 +1003,7 @@ function checkOverdue() {
         [stand.id, bike.id],
       );
       publishLockCommand(bike.id, "lock");
+      publishBikeStateThingSpeak(bike.id);
       console.log(`[OVERDUE] Booking #${booking.id} auto-completed at ${stand.name}`);
       continue;
     }
@@ -860,6 +1019,7 @@ function checkOverdue() {
         "INSERT INTO alerts (type,booking_id,message) VALUES ('OVERDUE_USER',?,?)",
         [booking.id, `Bike ${bike.code} is overdue. Please return it immediately.`],
       );
+      publishBikeStateThingSpeak(bike.id, "OVERDUE_USER");
       const user = queryOne("SELECT * FROM users WHERE id=?", [booking.user_id]);
       console.log(`[EMAIL -> ${user.email}] Your bike ${bike.code} is overdue! Return it now.`);
       continue;
@@ -881,6 +1041,7 @@ function checkOverdue() {
       );
       run("UPDATE bikes SET status='MISSING' WHERE id=?", [bike.id]);
       run("UPDATE users SET is_banned=1 WHERE id=?", [booking.user_id]);
+      publishBikeStateThingSpeak(bike.id, "OVERDUE_GUARD");
       const user = queryOne("SELECT * FROM users WHERE id=?", [booking.user_id]);
       console.log(
         `[GUARD ALERT] ${bike.code} missing. Last GPS: (${bike.last_lat},${bike.last_lng}). User ${user.name} banned.`,

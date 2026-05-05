@@ -3,3 +3,5 @@ backend/cbss.db
 __pycache__/
 *.pyc
 cbss.tar.gz
+.env
+backend/.env
